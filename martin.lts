@@ -1,0 +1,53 @@
+/* number of enemies to be defined */
+const N= 3
+
+range T = 1..N
+
+GATE = UP, 
+UP = ( lower -> DOWN 
+	| pass -> UP ),
+DOWN = ( raise -> UP ).
+
+ENTERING_SENSOR = ( enter -> ENTERING_SENSOR ).
+EXITING_SENSOR = ( exit -> EXITING_SENSOR ).
+
+WARNING = STATUS[0],
+STATUS [i:0..N] = (when (i==0) off -> STATUS[0]
+				| when (i<N) up -> STATUS[i+1]
+				| when (i>0) down -> STATUS[i-1]).
+
+MARTIN = ( leave -> enter -> exit -> MARTIN).
+
+ENEMY = ( enter -> exit -> ENEMY).
+
+property NO_CRASH = ( m.enter -> MARTININ
+					| e.[i:T].enter -> ENEMYIN[1] ),
+MARTININ = (m.exit -> NO_CRASH),
+ENEMYIN[j:T] = ( when (j<N) e.[i:T].enter -> ENEMYIN[j+1]
+				| when (j>1) e.[i:T].exit -> ENEMYIN[j-1]
+				| when (j==1) e.[i:T].exit -> NO_CRASH ).
+
+/* model of the behaviour of the system, with multiple enemies, martin, the warning signal, the signals specified as requested and a new controller process that makes martin safe 
+controlling the gate, alphabet extension forbids the movement of the gate at any other time */
+CONTROLLER = 	( leave -> lower -> LOWERED),
+LOWERED =       (enter -> ENTERED),
+ENTERED = 		(exit -> EXITED),
+EXITED=			( raise -> CONTROLLER ) + {lower, raise} .
+
+/*it needs to be splitted because the controller needs to take into account that Martin may decide to come back to his house and immediately exiting without having the gate raised in the
+meantime */
+
+||SAFE_MARTIN =  ( e[i:T]:ENEMY || gate:GATE || {sensor3,sensor2}:ENTERING_SENSOR || {sensor1}:EXITING_SENSOR || {m.sensor4,e[i:T].sensor4}::EXITING_SENSOR || w:WARNING || m:MARTIN || 
+				  c:CONTROLLER ) 
+						/ {  forall [i:T] {e.[i].enter /gate.pass, e.[i].enter/sensor3.enter, e.[i].enter/w.up, e.[i].exit/w.down, e.[i].exit/e.[i].sensor4.exit },  
+							m.leave/{sensor1.exit,c.leave}, m.exit/{m.sensor4.exit,c.exit}, m.enter/{w.off,c.enter,sensor2.enter}, gate.lower/c.lower, gate.raise/c.raise }.
+
+||CRASH_SHOULD_NOT_HAPPEN = (SAFE_MARTIN || NO_CRASH).
+
+/* progress */
+progress LIVE_MARTIN = {m.exit}
+
+/* the road gets congested when the priority of the entry action is higher than the priority of the exit */
+||SAFE_CONGESTED = SAFE_MARTIN  >> {e.[i:T].exit}.
+
+

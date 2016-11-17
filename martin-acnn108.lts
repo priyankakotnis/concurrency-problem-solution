@@ -1,0 +1,61 @@
+/*
+Concurrency Coursework 2015-16
+Part A – Unsafe Model – INDIVIDUAL
+Assuming the max enemy count is 3. At any point of time as far as the gate is not lowered, new enemies can pass the gate i.e. enter the road.
+Also enemies can share the road with other enemies but Martin needs exclusive access to the road which will be given in the safe model.
+Gate has no controller, it's actions are open not controlled by Martin or Enemies.
+The range ID is used similarly to that used in the Bridge example, to identify enemies.
+*/
+
+const N = 3 // Max count of of enemies
+range ID= 1..N // Enemy identities
+range NUM = 0..N //Enemy count
+
+/*Sensors*/
+ENTERING_SENSOR = ( enter -> ENTERING_SENSOR).
+EXITING_SENSOR = ( exit -> EXITING_SENSOR).
+
+/*Gate*/
+GATE = UP,
+UP = ( lower -> DOWN
+| pass -> UP ),
+DOWN = ( raise -> UP )/{enter/pass}.
+
+/*Enemy*/
+ENEMY = ( pass -> exit -> ENEMY )/{enter/pass}.	
+
+/*Martin*/
+MARTIN = ( house.exit -> off -> enter -> exit -> MARTIN ).	
+
+/*Warning indicator - maintains a counter is ON as long as there are enemies on the road.*/
+WARNING_INDICATOR = COUNT[0],
+COUNT[i:NUM] = (   when(i==0) off -> COUNT[0] 
+				 | when (i<N) on -> COUNT[i+1] 
+				 | when (i>0) down -> COUNT[i-1] 
+				).
+
+/*Checks for crash assuming crash will happen if both Martin and Enemy are on the road at the same time.*/
+property NO_CRASH = ( martin.enter -> MARTIN_ON
+					|  enemy[ID].enter -> ENEMY_ON[1]),
+MARTIN_ON = ( martin.exit -> NO_CRASH ),
+ENEMY_ON[i:ID] = (    when(i<N) enemy[ID].enter -> ENEMY_ON[i+1]
+					| when(i==1) enemy[ID].exit -> NO_CRASH
+					| when(i>1)  enemy[ID].exit -> ENEMY_ON[i-1] 
+				 ).
+
+/*Just a subprocess to check Enemy, Gate and Warning Indicator composition*/
+||ENEMY_WARNING = ( enemy[ID]:ENEMY || gate:GATE || ind:WARNING_INDICATOR || enemy[ID]:ENTERING_SENSOR  )/{enemy[i:ID].enter/{ind.on,gate.enter},enemy[i:ID].exit/ind.down}.
+
+/*Martin composed with Enemy_Warning*/
+||ENEMY_MARTIN = ( ENEMY_WARNING || martin:MARTIN || martin.house:EXITING_SENSOR || martin:ENTERING_SENSOR ||  {martin,enemy[ID]}::EXITING_SENSOR )/{warningoff/{martin.off,ind.off}}.
+
+/*Unsafe Martin with No_Crash - Martin can find himself on the road while enemies are also on it.*/
+||UNSAFE_MARTIN = ( ENEMY_MARTIN || NO_CRASH).
+
+/*
+Trace to property violation in NO_CRASH:
+	martin.house.exit
+	warningoff
+    martin.enter
+	enemy.1.enter
+*/
